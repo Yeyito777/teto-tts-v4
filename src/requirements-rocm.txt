@@ -1,0 +1,23 @@
+# ROCm inference deps for Arch's system PyTorch ROCm package.
+# Create the venv with: python3 -m venv --system-site-packages .venv-rocm
+# Do NOT install pip torch/torchaudio here; use Arch's python-pytorch-opt-rocm.
+numpy
+librosa>=0.10.1
+hydra-core>=1.3.2
+omegaconf
+transformers<=4.57.3
+safetensors
+huggingface_hub
+psutil
+rich>=13.5.3
+natsort>=8.4.0
+einops>=0.7.0
+einx[torch]==0.2.2
+descript-audio-codec
+opencc-python-reimplemented
+tiktoken>=0.8.0
+cachetools
+click
+tqdm
+loguru
+loralib>=0.1.2

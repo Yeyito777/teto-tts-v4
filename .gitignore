@@ -34,3 +34,15 @@ venv/
 *.swp
 *.swo
 *.ffprobe.json
+
+# Local model/runtime directories
+model/*
+!model/README.md
+results/*
+!results/README.md
+src/fish-speech/
+src/reference_artificialguybr_fish_s2_pro_zero_app.py
+.venv-cpu/
+
+.venv-rocm/
+src/__pycache__/
