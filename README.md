@@ -1,16 +1,11 @@
 # teto-tts-v4
 
-Current accepted Fish S2-Pro Teto voice-cloning stack.
+Current accepted Fish S2-Pro Teto voice-cloning stack and dataset-generation style spec.
 
-Start here for the definitive dataset-generation style:
+Start here:
 
 ```text
 DATASET_STYLE.md
-```
-
-Longer current-stack notes:
-
-```text
 CURRENT_STACK.md
 ```
 
@@ -22,25 +17,13 @@ Instagram DXSxwh7jL8x first 15s, preserved/no preprocessing
 → [emphasis] + emotion/style tags
 ```
 
-Convenience folders:
-
-```text
-refs/      source and winning reference symlinks
-examples/  accepted generated examples
-docs/      future notes
-```
-
-Canonical current ref:
+Canonical current local ref:
 
 ```text
 refs/winning-ref-current.wav
 ```
 
-Canonical dataset style:
-
-```text
-[emphasis] [emotion/style] text
-```
+Audio/media artifacts are intentionally ignored by git.
 
 ## License
 

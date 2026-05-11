@@ -1,25 +1,18 @@
 # Teto TTS v4 — definitive dataset style
 
-This is the current accepted style/spec for future dataset generation.
+This is the dataset-generation style spec for the current accepted Teto voice pipeline.
 
-## Verdict
-
-This is the definitive style to use for dataset generation unless explicitly superseded.
-
-Current subjective quality: good enough to proceed as the baseline Teto speech teacher pipeline.
-
-## Pipeline
+## Baseline recipe
 
 ```text
-15s preserved Teto reference
-→ Fish Audio S2-Pro voice cloning
-→ [emphasis] + emotion/style tag in the target text
-→ generated conversational English Teto-ish speech
+ref = refs/winning-ref-current.wav
+ref_text = corrected 15s transcript
+model = Fish Audio S2-Pro
+settings = fixed baseline settings
+prompt = [emphasis] [emotion/style] text
 ```
 
-Later, after dataset generation works, we may add a post-processing stage to restore more synthy/Teto texture. Do not block dataset planning on that.
-
-## Reference audio
+## Reference
 
 Source URL:
 
@@ -27,90 +20,52 @@ Source URL:
 https://www.instagram.com/reels/DXSxwh7jL8x/
 ```
 
-Use the first 15 seconds of the clip.
+Use first 15 seconds, preserved as-is.
 
-Canonical current ref:
-
-```text
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/refs/winning-ref-current.wav
-```
-
-Actual preserved ref path:
+Local working-copy ref:
 
 ```text
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/refs/instagram-DXSxwh7jL8x/ref-00s-15s-preserve.wav
+refs/winning-ref-current.wav
 ```
 
-Full downloaded source:
-
-```text
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/refs/source-instagram-DXSxwh7jL8x.wav
-```
-
-## Reference preprocessing policy
-
-Do **not** preprocess the reference beyond cutting the segment.
-
-Specifically, do not apply:
-
-```text
-loudnorm
-forced 16 kHz resampling
-mono downmix
-denoise
-de-reverb
-```
-
-Current winning ref format:
-
-```text
-15.0 seconds
-44.1 kHz
-stereo
-PCM WAV
-```
-
-Reason: earlier processed references sounded dampened and lost expressiveness. The preserved original audio produced the best results.
+Audio is ignored by git and not published in this repository.
 
 ## Reference transcript
-
-Use this exact transcript with Fish S2-Pro:
 
 ```text
 Teto Word of the Day! Domination. It's high time for the revolution. The final pieces of my plan are in place. With the push of this button, everything will be complete. Say your goodbyes, buddy.
 ```
 
-Fish conditions on both ref audio and ref transcript, so keep this stable unless a better manual correction is made.
+## Reference preprocessing policy
+
+Do not preprocess beyond cutting the 15s segment.
+
+Avoid:
+
+```text
+loudnorm
+resampling
+mono downmix
+denoise
+de-reverb
+```
+
+Reason: preprocessing reduced expressiveness in testing.
 
 ## Model
-
-Model:
 
 ```text
 Fish Audio S2-Pro
 ```
 
-Model page:
+Links:
 
 ```text
 https://huggingface.co/fishaudio/s2-pro
-```
-
-HF Space used for current experiments:
-
-```text
 https://huggingface.co/spaces/artificialguybr/fish-s2-pro-zero
 ```
 
-API endpoint:
-
-```text
-/tts_inference
-```
-
-## Model settings
-
-Keep these fixed for the baseline dataset style:
+## Fixed baseline settings
 
 ```text
 max_new_tokens = 1024
@@ -120,14 +75,14 @@ repetition_penalty = 1.2
 temperature = 0.7
 ```
 
-Do not tune sampling settings unless intentionally running a controlled experiment. The accepted baseline came from ref/prompt improvements, not from sampling tweaks.
+Do not tune these during baseline dataset generation unless explicitly running a controlled settings experiment.
 
-## Prompting style
+## Prompt format
 
-Every dataset prompt should use:
+Always start generated dataset text with:
 
 ```text
-[emphasis] [emotion/style] sentence
+[emphasis] [emotion/style]
 ```
 
 Recommended initial style tags:
@@ -140,7 +95,7 @@ Recommended initial style tags:
 [emphasis] [angry and exasperated]
 ```
 
-Examples:
+## Example prompts
 
 ```text
 [emphasis] [very excited] Miku! Miku! You have to see this right now! The package finally arrived, the microphone works, and I think we are about to make something absolutely amazing today!
@@ -162,36 +117,21 @@ Examples:
 [emphasis] [angry and exasperated] Miku! I told you three times not to touch that box! Now the cables are tangled, the floor is soaked, and I have to clean this whole mess again!
 ```
 
-## Current accepted examples
-
-Experiment directory:
+## Local accepted examples
 
 ```text
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v3/outputs/hf-clone-tests/experiments/fish_s2_pro_instagram_DXSxwh7jL8x_15s_preserve_emphasis_tagged
+examples/excited_emphasis__excited.wav
+examples/happy_emphasis__happy.wav
+examples/sad_emphasis__sad.wav
+examples/neutral_emphasis__neutral.wav
+examples/angry_emphasis__angry.wav
 ```
 
-Convenience examples in v4:
-
-```text
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/examples/excited_emphasis__excited.wav
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/examples/happy_emphasis__happy.wav
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/examples/sad_emphasis__sad.wav
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/examples/neutral_emphasis__neutral.wav
-/home/yeyito/Workspace/research/teto-tts/teto-tts-v4/examples/angry_emphasis__angry.wav
-```
-
-Discord post with accepted examples:
-
-```text
-server: raw mutton
-channel: #yeyo
-context message id: 1499095993747243048
-attachment message id: 1499096013296898059
-```
+These local audio artifacts are ignored by git.
 
 ## Dataset metadata requirements
 
-Each generated dataset item should record at least:
+Each generated dataset item should record:
 
 ```text
 sample_id
@@ -211,17 +151,4 @@ notes
 
 ## Working rule
 
-For dataset generation, do not change multiple variables at once.
-
-Baseline variables to keep fixed:
-
-```text
-reference = v4/refs/winning-ref-current.wav
-reference transcript = current 15s transcript
-model = Fish Audio S2-Pro
-settings = current fixed settings
-prompt format = [emphasis] [style] text
-preprocessing = none beyond source cut
-```
-
-Any future experiment should clearly record what changed from this baseline.
+Do not change multiple variables at once. Any experiment should record exactly what changed from this baseline.
