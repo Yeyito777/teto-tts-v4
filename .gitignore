@@ -1,0 +1,36 @@
+# Audio/media artifacts and downloaded/generated samples are not tracked in the public repo.
+# They may be copyrighted, large, or environment-specific.
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.opus
+*.m4a
+*.webm
+*.mp4
+
+# Local generated data / future dataset outputs
+outputs/
+dataset/
+datasets/
+generated/
+.cache/
+
+# Secrets/tokens
+.env
+.env.*
+secrets/
+*.key
+*.token
+hf_token
+
+# Python/cache/editor noise
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+.DS_Store
+*.swp
+*.swo
+*.ffprobe.json
