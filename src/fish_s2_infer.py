@@ -331,9 +331,15 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--max-seq-len", type=int, default=4096, help="Reduce KV cache; 2048/4096 recommended for 8GB VRAM")
     ap.add_argument("--runtime-quant", choices=["none", "gfx1010-int4"], default="none", help="Use local gfx1010 HIP int4 Linear kernel after loading source weights")
     ap.add_argument("--int4-group-size", type=int, default=128)
+    ap.add_argument("--int4-symmetric", action="store_true", help="Use faster symmetric int4 dequant: w=(q-8)*scale, no per-group zero")
+    ap.add_argument("--prefill-torch-dequant-threshold", type=int, default=0, help="For M>=threshold, transiently dequantize int4 Linear to bf16 and use torch/rocBLAS; intended only to speed large prompt prefill")
+    ap.add_argument("--keep-fast-layers-bf16", action="store_true", help="Do not int4-quantize DualAR fast_layers/fast_output; useful for speed/VRAM hybrid tests")
+    ap.add_argument("--fast-semantic-proj", action="store_true", help="Avoid Fish's full tied-vocab projection during AR decode; project only semantic IDs + im_end")
+    ap.add_argument("--compile-decode", action="store_true", help="Try torch.compile on the per-token decode function after custom setup")
     ap.add_argument("--codec-mask-size", type=int, default=2048, help="Shrink codec causal masks before GPU move; Fish default hardcodes 32768")
     ap.add_argument("--threads", type=int, default=max(1, min(os.cpu_count() or 1, 12)))
     ap.add_argument("--max-new-tokens", type=int, default=1024)
+    ap.add_argument("--repeat", type=int, default=1, help="Run generation repeatedly after one load; output filenames get .runNN suffix when >1")
     ap.add_argument("--chunk-length", type=int, default=200)
     ap.add_argument("--top-p", type=float, default=0.7)
     ap.add_argument("--top-k", type=int, default=30)
@@ -405,14 +411,32 @@ def main() -> int:
         # Build/load the extension before moving the large model to the GPU.
         load_extension(verbose=False)
         llama_model = DualARTransformer.from_pretrained(str(args.model_dir), load_weights=True)
-        n_linear, n_params = replace_linear(llama_model, groupsize=args.int4_group_size)
+        skip_prefixes = ("fast_layers", "fast_output") if args.keep_fast_layers_bf16 else ()
+        n_linear, n_params = replace_linear(
+            llama_model,
+            groupsize=args.int4_group_size,
+            skip_prefixes=skip_prefixes,
+            symmetric=args.int4_symmetric,
+            torch_dequant_threshold=args.prefill_torch_dequant_threshold,
+        )
         log(f"Replaced {n_linear} nn.Linear modules covering {n_params:,} weights with gfx1010 int4 kernels")
+        if args.int4_symmetric:
+            log("Using symmetric int4 weights: w=(q-8)*scale")
+        if args.prefill_torch_dequant_threshold:
+            log(f"Using transient torch dequant for Linear inputs with M>={args.prefill_torch_dequant_threshold}")
+        if skip_prefixes:
+            log(f"Kept bf16 modules under prefixes: {', '.join(skip_prefixes)}")
         llama_model = llama_model.to(device=device, dtype=precision)
         decode_one_token = decode_one_token_ar
         llama_model.fixed_temperature = torch.tensor(0.7, device=device, dtype=torch.float)
         llama_model.fixed_top_p = torch.tensor(0.7, device=device, dtype=torch.float)
         llama_model.fixed_repetition_penalty = torch.tensor(1.5, device=device, dtype=torch.float)
         llama_model._cache_setup_done = False
+        if args.fast_semantic_proj:
+            from hip_int4_gfx1010.fast_decode import decode_one_token_ar_semantic_slice
+
+            decode_one_token = decode_one_token_ar_semantic_slice
+            log("Enabled fast semantic-only projection for AR decode")
     else:
         llama_model, decode_one_token = init_model(
             checkpoint_path=str(args.model_dir),
@@ -420,6 +444,22 @@ def main() -> int:
             precision=precision,
             compile=False,
         )
+
+    if args.compile_decode:
+        import torch._dynamo
+
+        torch._dynamo.config.suppress_errors = True
+        log("Compiling decode_one_token with torch.compile(fullgraph=False)")
+        decode_one_token = torch.compile(decode_one_token, backend="inductor", fullgraph=False, mode="default", dynamic=True)
+
+    if args.fast_semantic_proj:
+        # Fish's generate() hardcodes prefill_decode = decode_one_token_ar for the
+        # first token. Patch the module global so prefill also avoids the full
+        # 155k tied-vocab projection and, when requested, uses the compiled path.
+        import fish_speech.models.text2semantic.inference as fish_inference
+
+        fish_inference.decode_one_token_ar = decode_one_token
+        log("Patched Fish prefill decode to use semantic-only projection path")
 
     # Reduce cache from the model default (32768) to fit smaller GPUs.
     # 32768 would consume multiple GiB of KV cache before generation starts.
@@ -477,74 +517,108 @@ def main() -> int:
 
     prompt_tokens_list = [encode_reference_audio(args.ref_audio).cpu()]
 
-    log("Starting generation")
-    generator = generate_long(
-        model=llama_model,
-        device=device,
-        decode_one_token=decode_one_token,
-        text=args.text,
-        num_samples=1,
-        max_new_tokens=args.max_new_tokens,
-        top_p=args.top_p,
-        top_k=args.top_k,
-        temperature=args.temperature,
-        repetition_penalty=args.repetition_penalty,
-        compile=False,
-        iterative_prompt=True,
-        chunk_length=args.chunk_length,
-        prompt_text=[args.ref_text],
-        prompt_tokens=prompt_tokens_list,
-    )
+    def numbered_path(path: Path, idx: int) -> Path:
+        if args.repeat <= 1:
+            return path
+        return path.with_name(f"{path.stem}.run{idx:02d}{path.suffix}")
 
-    codes = []
-    for response in generator:
-        if response.action == "sample":
-            codes.append(response.codes)
-        elif response.action == "next":
-            break
+    last_meta = None
+    for run_idx in range(1, max(1, args.repeat) + 1):
+        run_t0 = time.time()
+        if args.repeat > 1:
+            log(f"Starting generation run {run_idx}/{args.repeat}")
+        else:
+            log("Starting generation")
+        generation_t0 = time.time()
+        generator = generate_long(
+            model=llama_model,
+            device=device,
+            decode_one_token=decode_one_token,
+            text=args.text,
+            num_samples=1,
+            max_new_tokens=args.max_new_tokens,
+            top_p=args.top_p,
+            top_k=args.top_k,
+            temperature=args.temperature,
+            repetition_penalty=args.repetition_penalty,
+            compile=False,
+            iterative_prompt=True,
+            chunk_length=args.chunk_length,
+            prompt_text=[args.ref_text],
+            prompt_tokens=prompt_tokens_list,
+        )
 
-    if not codes:
-        raise RuntimeError("No audio codes generated")
+        codes = []
+        for response in generator:
+            if response.action == "sample":
+                codes.append(response.codes)
+            elif response.action == "next":
+                break
 
-    log(f"Generated {len(codes)} code chunk(s)")
-    merged_codes = codes[0] if len(codes) == 1 else torch.cat(codes, dim=1)
-    audio_waveform = decode_codes_to_audio(merged_codes)
-    audio_np = audio_waveform.cpu().float().numpy()
-    audio_i16 = (audio_np * 32767).clip(-32768, 32767).astype(np.int16)
+        if not codes:
+            raise RuntimeError("No audio codes generated")
 
-    write_wav_int16(args.out, codec_model.sample_rate, audio_i16)
-    elapsed = time.time() - t0
-    log(f"Saved wav: {args.out}")
+        generation_elapsed = time.time() - generation_t0
 
-    meta = {
-        "text": args.text,
-        "ref_audio": str(args.ref_audio),
-        "ref_text": args.ref_text,
-        "model_dir": str(args.model_dir),
-        "fish_speech_dir": str(args.fish_speech_dir),
-        "out": str(args.out),
-        "device": device,
-        "precision": args.precision,
-        "codec_path": str(codec_path),
-        "codec_device": codec_device,
-        "max_seq_len": llama_model.config.max_seq_len,
-        "codec_mask_size": args.codec_mask_size,
-        "threads": args.threads,
-        "settings": {
-            "max_new_tokens": args.max_new_tokens,
-            "chunk_length": args.chunk_length,
-            "top_p": args.top_p,
-            "top_k": args.top_k,
-            "repetition_penalty": args.repetition_penalty,
-            "temperature": args.temperature,
-        },
-        "runtime_quant": args.runtime_quant,
-        "int4_group_size": args.int4_group_size if args.runtime_quant == "gfx1010-int4" else None,
-        "elapsed_sec": round(elapsed, 3),
-    }
-    args.metadata_out.parent.mkdir(parents=True, exist_ok=True)
-    args.metadata_out.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    log(f"Saved metadata: {args.metadata_out}")
+        log(f"Generated {len(codes)} code chunk(s)")
+        merged_codes = codes[0] if len(codes) == 1 else torch.cat(codes, dim=1)
+        decode_t0 = time.time()
+        audio_waveform = decode_codes_to_audio(merged_codes)
+        decode_elapsed = time.time() - decode_t0
+        audio_np = audio_waveform.cpu().float().numpy()
+        audio_i16 = (audio_np * 32767).clip(-32768, 32767).astype(np.int16)
+        output_duration = float(audio_i16.shape[-1]) / float(codec_model.sample_rate)
+
+        out_path = numbered_path(args.out, run_idx)
+        meta_path = numbered_path(args.metadata_out, run_idx)
+        write_wav_int16(out_path, codec_model.sample_rate, audio_i16)
+        run_elapsed = time.time() - run_t0
+        elapsed = time.time() - t0
+        log(f"Saved wav: {out_path}")
+
+        meta = {
+            "text": args.text,
+            "ref_audio": str(args.ref_audio),
+            "ref_text": args.ref_text,
+            "model_dir": str(args.model_dir),
+            "fish_speech_dir": str(args.fish_speech_dir),
+            "out": str(out_path),
+            "device": device,
+            "precision": args.precision,
+            "codec_path": str(codec_path),
+            "codec_device": codec_device,
+            "max_seq_len": llama_model.config.max_seq_len,
+            "codec_mask_size": args.codec_mask_size,
+            "threads": args.threads,
+            "settings": {
+                "max_new_tokens": args.max_new_tokens,
+                "chunk_length": args.chunk_length,
+                "top_p": args.top_p,
+                "top_k": args.top_k,
+                "repetition_penalty": args.repetition_penalty,
+                "temperature": args.temperature,
+            },
+            "runtime_quant": args.runtime_quant,
+            "int4_group_size": args.int4_group_size if args.runtime_quant == "gfx1010-int4" else None,
+            "int4_symmetric": args.int4_symmetric,
+            "prefill_torch_dequant_threshold": args.prefill_torch_dequant_threshold,
+            "fast_semantic_proj": args.fast_semantic_proj,
+            "keep_fast_layers_bf16": args.keep_fast_layers_bf16,
+            "compile_decode": args.compile_decode,
+            "repeat": args.repeat,
+            "run_index": run_idx,
+            "generated_code_frames": int(merged_codes.shape[-1]),
+            "generation_elapsed_sec": round(generation_elapsed, 3),
+            "decode_elapsed_sec": round(decode_elapsed, 3),
+            "output_duration_sec": round(output_duration, 3),
+            "realtime_factor": round(run_elapsed / output_duration, 3) if output_duration > 0 else None,
+            "run_elapsed_sec": round(run_elapsed, 3),
+            "elapsed_sec": round(elapsed, 3),
+        }
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        log(f"Saved metadata: {meta_path}")
+        last_meta = meta
     return 0
 
 

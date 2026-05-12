@@ -25,6 +25,41 @@ local builds. These generated files are ignored by git.
 
 ## Runtime command
 
+Fastest verified local 10-second recipe (after one warmup/compile run) keeps the
+S2-Pro token model on the RX 5700 XT and uses the CPU DAC codec, because CPU
+codec decode is currently faster than MIOpen's GPU codec path for this clip
+length on this machine:
+
+```bash
+HIP_VISIBLE_DEVICES=0 python src/fish_s2_infer.py \
+  --device cuda \
+  --codec-device cpu \
+  --model-dir model/s2-pro \
+  --precision bfloat16 \
+  --runtime-quant gfx1010-int4 \
+  --fast-semantic-proj \
+  --compile-decode \
+  --prefill-torch-dequant-threshold 16 \
+  --int4-group-size 128 \
+  --max-seq-len 3072 \
+  --codec-mask-size 2048 \
+  --max-new-tokens 217 \
+  --threads 5
+```
+
+Measured run:
+
+```text
+output: results/gpu_gfx1010_int4_sub30_217_cpu5_repeat.run02.wav
+duration: 10.031 s
+run wall time: 29.412 s
+RTF: 2.93
+generation: 217 tokens in 19.54 s, 11.11 tokens/s
+GPU memory used during generation: 5.23 GB
+```
+
+Full-GPU model+codec smoke-test form:
+
 ```bash
 HIP_VISIBLE_DEVICES=0 python src/fish_s2_infer.py \
   --device cuda \
@@ -52,6 +87,15 @@ Important flags:
 - `--codec-device cuda`: full GPU model + codec path.
 - `--codec-mask-size 2048`: Fish's codec constructs 32768×32768 causal masks by
   default; shrinking them is required to fit the codec on this 8 GB card.
+- `--fast-semantic-proj`: skips Fish's full 155k tied-vocab output projection
+  during AR decode and projects only semantic IDs plus `<|im_end|>`.
+- `--compile-decode`: uses `torch.compile` for the per-token decode path. The
+  first run pays compile overhead; subsequent runs are the speed target.
+- `--prefill-torch-dequant-threshold 16`: for prefill-sized Linear inputs,
+  transiently dequantizes packed int4 weights and lets rocBLAS handle the larger
+  GEMM, while decode-time M=1 still uses the persistent packed HIP kernel.
+- `--threads 5`: fastest measured CPU codec setting on the local Ryzen 5 3600XT
+  for ~10 s DAC decode; using all 12 hardware threads was slower.
 
 ## Verified smoke test
 
@@ -77,8 +121,9 @@ ASR: "Hello, Miku!"
 ```
 
 Earlier scalar-per-output kernel also completed full GPU inference, but only at
-about 0.10 tokens/s. The checked-in kernel uses a 256-thread CTA reduction per
-output element and is roughly 9× faster on the same tiny smoke test.
+about 0.10 tokens/s. The checked-in kernel now uses a single-wavefront CTA,
+iterates packed bytes instead of individual nibbles, and is much faster on
+decode-time GEMV shapes.
 
 ## Current limitations
 
@@ -87,4 +132,3 @@ output element and is roughly 9× faster on the same tiny smoke test.
 - The kernel is portable RDNA HIP, not a hand-tuned MFMA/assembly kernel. It is
   now functional and fits full GPU inference, but more optimization is possible.
 - Only bf16 activations are wired into the extension.
-

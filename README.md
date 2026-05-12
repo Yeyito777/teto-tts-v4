@@ -29,8 +29,32 @@ Audio/media artifacts are intentionally ignored by git.
 ## Local RX 5700 XT / gfx1010 int4 runtime
 
 This working copy includes a custom HIP extension for the local RX 5700 XT that
-lets Fish S2-Pro run with packed int4 Linear weights on the GPU, plus the codec
-on the GPU after shrinking codec masks:
+lets Fish S2-Pro run with packed int4 Linear weights on the GPU.
+
+Fastest verified local 10-second target run, after one warmup/compile pass:
+
+```text
+10.031 s WAV generated in 29.412 s wall time
+RTF 2.93
+RX 5700 XT semantic/acoustic-token model, CPU codec
+results/gpu_gfx1010_int4_sub30_217_cpu5_repeat.run02.wav
+```
+
+Recipe for that speed path:
+
+```bash
+HIP_VISIBLE_DEVICES=0 python src/fish_s2_infer.py \
+  --device cuda --codec-device cpu \
+  --model-dir model/s2-pro --precision bfloat16 \
+  --runtime-quant gfx1010-int4 --int4-group-size 128 \
+  --fast-semantic-proj --compile-decode \
+  --prefill-torch-dequant-threshold 16 \
+  --max-seq-len 3072 --codec-mask-size 2048 \
+  --max-new-tokens 217 --threads 5
+```
+
+Full GPU model+codec still works, but on this card the CPU codec is currently
+faster end-to-end for ~10 s clips. Full-GPU smoke-test form:
 
 ```bash
 HIP_VISIBLE_DEVICES=0 python src/fish_s2_infer.py \

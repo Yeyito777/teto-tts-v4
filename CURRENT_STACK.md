@@ -81,11 +81,25 @@ Fish Audio S2-Pro
 Local RX 5700 XT / gfx1010 runtime note:
 
 ```text
-src/fish_s2_infer.py --runtime-quant gfx1010-int4 --codec-device cuda --codec-mask-size 2048
+src/fish_s2_infer.py --runtime-quant gfx1010-int4 --fast-semantic-proj --compile-decode --prefill-torch-dequant-threshold 16 --codec-device cpu --threads 5
 ```
 
 This uses the repo's custom HIP packed-int4 Linear kernel so the S2-Pro model
-and codec can both run on the 8 GB GPU. See `docs/GFX1010_INT4_RUNTIME.md`.
+fits on the 8 GB GPU. The current fastest measured ~10 s local path keeps the
+S2-Pro token model on the RX 5700 XT and decodes the final DAC waveform on CPU,
+which is faster than the full-GPU codec path on this machine. See
+`docs/GFX1010_INT4_RUNTIME.md`.
+
+Verified sub-30 s target measurement after one warmup/compile pass:
+
+```text
+command family: --runtime-quant gfx1010-int4 --fast-semantic-proj --compile-decode --prefill-torch-dequant-threshold 16 --codec-device cpu --threads 5 --max-new-tokens 217
+output: results/gpu_gfx1010_int4_sub30_217_cpu5_repeat.run02.wav
+duration: 10.031 s
+wall time: 29.412 s
+RTF: 2.93
+generation: 217 semantic frames in 19.54 s, 11.11 tokens/s
+```
 
 Links:
 
