@@ -329,6 +329,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--codec-device", choices=["auto", "cpu", "cuda"], default="auto", help="Default: cpu when model device is cuda, otherwise model device")
     ap.add_argument("--precision", choices=["bfloat16", "float16", "float32"], default="bfloat16")
     ap.add_argument("--max-seq-len", type=int, default=4096, help="Reduce KV cache; 2048/4096 recommended for 8GB VRAM")
+    ap.add_argument("--runtime-quant", choices=["none", "gfx1010-int4"], default="none", help="Use local gfx1010 HIP int4 Linear kernel after loading source weights")
+    ap.add_argument("--int4-group-size", type=int, default=128)
+    ap.add_argument("--codec-mask-size", type=int, default=2048, help="Shrink codec causal masks before GPU move; Fish default hardcodes 32768")
     ap.add_argument("--threads", type=int, default=max(1, min(os.cpu_count() or 1, 12)))
     ap.add_argument("--max-new-tokens", type=int, default=1024)
     ap.add_argument("--chunk-length", type=int, default=200)
@@ -350,6 +353,7 @@ def main() -> int:
     if not args.ref_audio.exists():
         raise SystemExit(f"Missing reference audio: {args.ref_audio}")
 
+    sys.path.insert(0, str(repo_root() / "src"))
     sys.path.insert(0, str(args.fish_speech_dir.resolve()))
 
     import numpy as np
@@ -358,7 +362,8 @@ def main() -> int:
     from hydra.utils import instantiate
     from omegaconf import OmegaConf
 
-    from fish_speech.models.text2semantic.inference import generate_long, init_model
+    from fish_speech.models.text2semantic.inference import generate_long, init_model, decode_one_token_ar
+    from fish_speech.models.text2semantic.llama import DualARTransformer
 
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(max(1, min(4, args.threads)))
@@ -385,18 +390,36 @@ def main() -> int:
         log(f"CUDA/ROCm device: {torch.cuda.get_device_name(0)}")
     log(f"CPU threads: {args.threads}")
     log(f"Using model precision: {args.precision}")
+    log(f"Runtime quantization: {args.runtime_quant}")
     log(f"Codec device: {codec_device}")
     log(f"Using codec precision: {str(codec_precision).replace('torch.', '')}")
     log(f"Model dir: {args.model_dir}")
     log(f"Reference audio: {args.ref_audio}")
 
     log("Loading Fish S2-Pro language/acoustic token model")
-    llama_model, decode_one_token = init_model(
-        checkpoint_path=str(args.model_dir),
-        device=device,
-        precision=precision,
-        compile=False,
-    )
+    if args.runtime_quant == "gfx1010-int4":
+        if args.precision != "bfloat16":
+            raise SystemExit("gfx1010-int4 currently requires --precision bfloat16")
+        from hip_int4_gfx1010.int4_linear import load_extension, replace_linear
+
+        # Build/load the extension before moving the large model to the GPU.
+        load_extension(verbose=False)
+        llama_model = DualARTransformer.from_pretrained(str(args.model_dir), load_weights=True)
+        n_linear, n_params = replace_linear(llama_model, groupsize=args.int4_group_size)
+        log(f"Replaced {n_linear} nn.Linear modules covering {n_params:,} weights with gfx1010 int4 kernels")
+        llama_model = llama_model.to(device=device, dtype=precision)
+        decode_one_token = decode_one_token_ar
+        llama_model.fixed_temperature = torch.tensor(0.7, device=device, dtype=torch.float)
+        llama_model.fixed_top_p = torch.tensor(0.7, device=device, dtype=torch.float)
+        llama_model.fixed_repetition_penalty = torch.tensor(1.5, device=device, dtype=torch.float)
+        llama_model._cache_setup_done = False
+    else:
+        llama_model, decode_one_token = init_model(
+            checkpoint_path=str(args.model_dir),
+            device=device,
+            precision=precision,
+            compile=False,
+        )
 
     # Reduce cache from the model default (32768) to fit smaller GPUs.
     # 32768 would consume multiple GiB of KV cache before generation starts.
@@ -423,6 +446,15 @@ def main() -> int:
         state_dict = {k.replace("generator.", ""): v for k, v in state_dict.items() if "generator." in k}
     codec_model.load_state_dict(state_dict, strict=False)
     codec_model.eval()
+    if args.codec_mask_size > 0:
+        shrunk = 0
+        for mod in codec_model.modules():
+            mask = getattr(mod, "causal_mask", None)
+            if mask is not None and getattr(mask, "ndim", 0) == 2 and mask.shape[0] > args.codec_mask_size:
+                mod.causal_mask = torch.tril(torch.ones(args.codec_mask_size, args.codec_mask_size, dtype=torch.bool))
+                shrunk += 1
+        if shrunk:
+            log(f"Shrunk {shrunk} codec causal_mask buffer(s) to {args.codec_mask_size}x{args.codec_mask_size}")
     codec_model.to(device=codec_device, dtype=codec_precision)
 
     @torch.no_grad()
@@ -496,6 +528,7 @@ def main() -> int:
         "codec_path": str(codec_path),
         "codec_device": codec_device,
         "max_seq_len": llama_model.config.max_seq_len,
+        "codec_mask_size": args.codec_mask_size,
         "threads": args.threads,
         "settings": {
             "max_new_tokens": args.max_new_tokens,
@@ -505,6 +538,8 @@ def main() -> int:
             "repetition_penalty": args.repetition_penalty,
             "temperature": args.temperature,
         },
+        "runtime_quant": args.runtime_quant,
+        "int4_group_size": args.int4_group_size if args.runtime_quant == "gfx1010-int4" else None,
         "elapsed_sec": round(elapsed, 3),
     }
     args.metadata_out.parent.mkdir(parents=True, exist_ok=True)

@@ -46,3 +46,6 @@ src/reference_artificialguybr_fish_s2_pro_zero_app.py
 
 .venv-rocm/
 src/__pycache__/
+
+# torch.utils.cpp_extension HIP preprocessing products; regenerated locally.
+src/hip_int4_gfx1010/*_hip.*

@@ -78,6 +78,15 @@ Fish conditions on both reference audio and reference text, so keep this transcr
 Fish Audio S2-Pro
 ```
 
+Local RX 5700 XT / gfx1010 runtime note:
+
+```text
+src/fish_s2_infer.py --runtime-quant gfx1010-int4 --codec-device cuda --codec-mask-size 2048
+```
+
+This uses the repo's custom HIP packed-int4 Linear kernel so the S2-Pro model
+and codec can both run on the 8 GB GPU. See `docs/GFX1010_INT4_RUNTIME.md`.
+
 Links:
 
 ```text
