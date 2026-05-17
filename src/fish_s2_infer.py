@@ -338,7 +338,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--compile-decode", action="store_true", help="Try torch.compile on the per-token decode function after custom setup")
     ap.add_argument("--codec-mask-size", type=int, default=2048, help="Shrink codec causal masks before GPU move; Fish default hardcodes 32768")
     ap.add_argument("--threads", type=int, default=max(1, min(os.cpu_count() or 1, 12)))
-    ap.add_argument("--max-new-tokens", type=int, default=1024)
+    ap.add_argument("--max-new-tokens", type=int, default=1024, help="Generation ceiling; pass 0 or --no-token-cap to let Fish run until <|im_end|> or max_seq_len")
+    ap.add_argument("--no-token-cap", action="store_true", help="Alias for --max-new-tokens 0; avoids clipping speech at a tight benchmark token limit")
     ap.add_argument("--repeat", type=int, default=1, help="Run generation repeatedly after one load; output filenames get .runNN suffix when >1")
     ap.add_argument("--chunk-length", type=int, default=200)
     ap.add_argument("--top-p", type=float, default=0.7)
@@ -350,6 +351,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.no_token_cap:
+        args.max_new_tokens = 0
     t0 = time.time()
 
     if not args.model_dir.exists():
