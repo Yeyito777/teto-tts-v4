@@ -1,0 +1,177 @@
+{
+  "schema_version": "teto.dataset_plan.v1",
+  "name": "teto_v4_synth_150h",
+  "description": "Synthetic/distilled Teto-style speech corpus generated from the accepted Fish S2-Pro v4 stack.",
+  "target": {
+    "accepted_audio_hours": 150.0,
+    "accepted_audio_seconds": 540000,
+    "estimated_accepted_clips": 63854,
+    "language": "en"
+  },
+  "render_profile": {
+    "name": "gfx1010_no_token_cap_v1",
+    "engine": "fish_s2_pro",
+    "reference_audio": "refs/winning-ref-current.wav",
+    "reference_text": "Teto Word of the Day! Domination. It's high time for the revolution. The final pieces of my plan are in place. With the push of this button, everything will be complete. Say your goodbyes, buddy.",
+    "command_flags": {
+      "device": "cuda",
+      "codec_device": "cpu",
+      "model_dir": "model/s2-pro",
+      "precision": "bfloat16",
+      "runtime_quant": "gfx1010-int4",
+      "fast_semantic_proj": true,
+      "compile_decode": true,
+      "prefill_torch_dequant_threshold": 16,
+      "int4_group_size": 128,
+      "max_seq_len": 3072,
+      "codec_mask_size": 2048,
+      "no_token_cap": true,
+      "threads": 5,
+      "chunk_length": 200,
+      "top_p": 0.7,
+      "top_k": 30,
+      "temperature": 0.7,
+      "repetition_penalty": 1.2
+    }
+  },
+  "duration_distribution": [
+    {
+      "bin": "2-4s",
+      "share_hours": 0.08,
+      "target_hours": 12.0,
+      "target_seconds": 43200,
+      "target_sec_min": 2,
+      "target_sec_max": 4,
+      "planning_avg_sec": 3,
+      "target_words_min": 4,
+      "target_words_max": 12,
+      "estimated_clips": 14400,
+      "purpose": "Short reactions, interjections, short commands, punchlines"
+    },
+    {
+      "bin": "4-8s",
+      "share_hours": 0.27,
+      "target_hours": 40.5,
+      "target_seconds": 145800,
+      "target_sec_min": 4,
+      "target_sec_max": 8,
+      "planning_avg_sec": 6,
+      "target_words_min": 12,
+      "target_words_max": 25,
+      "estimated_clips": 24300,
+      "purpose": "Core phrase and sentence training"
+    },
+    {
+      "bin": "8-15s",
+      "share_hours": 0.35,
+      "target_hours": 52.5,
+      "target_seconds": 189000,
+      "target_sec_min": 8,
+      "target_sec_max": 15,
+      "planning_avg_sec": 11,
+      "target_words_min": 25,
+      "target_words_max": 50,
+      "estimated_clips": 17182,
+      "purpose": "Main sentence and short paragraph range"
+    },
+    {
+      "bin": "15-30s",
+      "share_hours": 0.20,
+      "target_hours": 30.0,
+      "target_seconds": 108000,
+      "target_sec_min": 15,
+      "target_sec_max": 30,
+      "planning_avg_sec": 21,
+      "target_words_min": 50,
+      "target_words_max": 100,
+      "estimated_clips": 5143,
+      "purpose": "Longer emotional continuity"
+    },
+    {
+      "bin": "30-60s",
+      "share_hours": 0.08,
+      "target_hours": 12.0,
+      "target_seconds": 43200,
+      "target_sec_min": 30,
+      "target_sec_max": 60,
+      "planning_avg_sec": 42,
+      "target_words_min": 100,
+      "target_words_max": 200,
+      "estimated_clips": 1029,
+      "purpose": "Long monologue and prosody stress tests"
+    },
+    {
+      "bin": "edge_nonstandard",
+      "share_hours": 0.02,
+      "target_hours": 3.0,
+      "target_seconds": 10800,
+      "target_sec_min": 2,
+      "target_sec_max": 15,
+      "planning_avg_sec": 6,
+      "target_words_min": 4,
+      "target_words_max": 40,
+      "estimated_clips": 1800,
+      "purpose": "Whispers, hesitations, laughs, numbers, lists, punctuation edge cases"
+    }
+  ],
+  "style_distribution": [
+    { "emotion": "calm and matter-of-fact", "share": 0.16, "prompt_prefix": "[emphasis] [calm and matter-of-fact]" },
+    { "emotion": "happy and cheerful", "share": 0.16, "prompt_prefix": "[emphasis] [happy and cheerful]" },
+    { "emotion": "very excited", "share": 0.14, "prompt_prefix": "[emphasis] [very excited]" },
+    { "emotion": "angry and exasperated", "share": 0.12, "prompt_prefix": "[emphasis] [angry and exasperated]" },
+    { "emotion": "sad and quiet", "share": 0.10, "prompt_prefix": "[emphasis] [sad and quiet]" },
+    { "emotion": "smug and teasing", "share": 0.09, "prompt_prefix": "[emphasis] [smug and teasing]" },
+    { "emotion": "nervous and flustered", "share": 0.08, "prompt_prefix": "[emphasis] [nervous and flustered]" },
+    { "emotion": "serious and dramatic", "share": 0.07, "prompt_prefix": "[emphasis] [serious and dramatic]" },
+    { "emotion": "confused and curious", "share": 0.05, "prompt_prefix": "[emphasis] [confused and curious]" },
+    { "emotion": "sleepy and soft", "share": 0.03, "prompt_prefix": "[emphasis] [sleepy and soft]" }
+  ],
+  "category_distribution": [
+    { "category": "dialogue_to_miku", "share": 0.18 },
+    { "category": "reactions_interjections", "share": 0.10 },
+    { "category": "slice_of_life", "share": 0.12 },
+    { "category": "tech_lab", "share": 0.12 },
+    { "category": "dramatic_anime", "share": 0.10 },
+    { "category": "instructions", "share": 0.08 },
+    { "category": "emotional_monologue", "share": 0.08 },
+    { "category": "narration", "share": 0.08 },
+    { "category": "comedy", "share": 0.08 },
+    { "category": "rare_edge_cases", "share": 0.06 }
+  ],
+  "splits": {
+    "train": 0.98,
+    "val": 0.01,
+    "test": 0.01,
+    "stratify_by": ["duration_target.bin", "style.emotion", "content.category"]
+  },
+  "qc_policy": {
+    "asr_required": true,
+    "wer_warn_threshold": 0.08,
+    "wer_reject_threshold": 0.18,
+    "final_meaningful_words_to_check": 5,
+    "reject_if_final_words_missing": true,
+    "reject_if_abrupt_tail": true,
+    "reject_if_mostly_silent": true,
+    "reject_if_clipped": true,
+    "manual_review": {
+      "new_profile_first_n": 50,
+      "random_accepted_fraction_per_batch": 0.01,
+      "review_all_borderline": true
+    }
+  },
+  "retry_policy": {
+    "max_attempts_per_prompt": 3,
+    "attempts": [
+      "retry_same_prompt_once",
+      "retry_with_calmer_style",
+      "split_long_prompt_or_regenerate_text"
+    ]
+  },
+  "pilot_phases": [
+    { "phase": 0, "accepted_hours": 0, "goal": "Build scripts, schemas, manifests, QC reports" },
+    { "phase": 1, "accepted_hours": 0.5, "estimated_clips": 250, "goal": "Manual listening and QC tuning" },
+    { "phase": 2, "accepted_hours": 5, "estimated_clips": 2000, "goal": "First downstream training smoke test" },
+    { "phase": 3, "accepted_hours": 25, "estimated_clips": 10000, "goal": "Serious model experiment and artifact audit" },
+    { "phase": 4, "accepted_hours": 150, "estimated_clips": 63854, "goal": "Full synthetic distillation corpus" }
+  ]
+}

@@ -131,6 +131,25 @@ These local audio artifacts are ignored by git.
 
 ## Dataset metadata requirements
 
+The full scalable 150h plan, JSONL manifest architecture, schemas, QC policy,
+and AI prompt-generation rules are in:
+
+```text
+docs/DATASET_GENERATION_PLAN.md
+configs/dataset_generation/teto_v4_150h_plan.json
+schemas/*.schema.json
+```
+
+For dataset rendering, prefer the natural-stop flag:
+
+```text
+--no-token-cap
+```
+
+This avoids clipping final words by tight benchmark token caps. The
+`max_new_tokens = 1024` value below remains the old broad baseline setting, but
+large-scale dataset generation should use the no-cap profile from the plan.
+
 Each generated dataset item should record:
 
 ```text

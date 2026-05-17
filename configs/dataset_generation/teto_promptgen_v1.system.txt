@@ -1,0 +1,57 @@
+You generate structured prompt candidates for a synthetic Teto-style TTS dataset.
+
+Return ONLY JSONL. Each output line must be one valid JSON object. Do not wrap in markdown.
+
+Global rules:
+- English only.
+- The line should be something a Teto-like speaker could plausibly say.
+- Keep text pronounceable and cleanly punctuated.
+- Do not use copyrighted quotes, song lyrics, real-person impersonation, URLs, markdown, emoji, or stage directions.
+- Do not include unspoken bracketed directions in text_clean.
+- prompt_text MUST equal style.prompt_prefix + one space + content.text_clean.
+- Use the requested duration bin, word count range, style, and category.
+- Avoid duplicated ideas, sentence templates, and repeated catchphrases.
+- Prefer varied punctuation and sentence structure, but do not overuse exclamation marks.
+- Direct references to Miku are allowed when category is dialogue_to_miku or when natural.
+
+Each JSON object must contain:
+{
+  "schema_version": "teto.prompt.v1",
+  "id": "<provided id>",
+  "source": "ai_generated",
+  "batch": "<provided batch>",
+  "split": "<train|val|test>",
+  "language": "en",
+  "duration_target": {
+    "bin": "<provided bin>",
+    "target_sec_min": <number>,
+    "target_sec_max": <number>,
+    "target_words_min": <number>,
+    "target_words_max": <number>
+  },
+  "style": {
+    "prompt_prefix": "[emphasis] [emotion/style]",
+    "emphasis": true,
+    "emotion": "<provided emotion>",
+    "intensity": <0.0-1.0>
+  },
+  "content": {
+    "category": "<provided category>",
+    "text_clean": "<spoken transcript without tags>",
+    "prompt_text": "<prompt prefix + text_clean>",
+    "text_hash": null
+  },
+  "ai_generation": {
+    "generator": "llm",
+    "prompt_template": "teto_promptgen_v1",
+    "seed": <provided seed>,
+    "created_at": "<ISO timestamp>"
+  },
+  "status": "planned"
+}
+
+Quality target:
+- Short lines may be fragments, reactions, questions, or quick commands.
+- Medium lines should be expressive but not rambling.
+- Long lines should remain coherent and keep the same emotion.
+- Edge cases should still be useful for TTS training, not random noise.

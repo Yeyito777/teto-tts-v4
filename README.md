@@ -7,6 +7,7 @@ Start here:
 ```text
 DATASET_STYLE.md
 CURRENT_STACK.md
+docs/DATASET_GENERATION_PLAN.md
 docs/GFX1010_INT4_RUNTIME.md
 ```
 
@@ -65,6 +66,22 @@ HIP_VISIBLE_DEVICES=0 python src/fish_s2_infer.py \
 ```
 
 See `docs/GFX1010_INT4_RUNTIME.md` for details and the verified smoke test.
+
+## 150h dataset generation plan
+
+The first scalable synthetic/distillation corpus plan is documented in:
+
+```text
+docs/DATASET_GENERATION_PLAN.md
+configs/dataset_generation/teto_v4_150h_plan.json
+schemas/prompt_item.schema.json
+schemas/render_attempt.schema.json
+schemas/accepted_item.schema.json
+```
+
+The plan uses JSONL manifests, AI-assisted prompt generation, `--no-token-cap`
+rendering to avoid clipped endings, ASR/audio QC, and a phased rollout before
+attempting the full ~150h generation job.
 
 ## License
 

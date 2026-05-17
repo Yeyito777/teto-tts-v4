@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Yeyito777/teto-tts-v4/schemas/render_attempt.schema.json",
+  "title": "Teto v4 render attempt",
+  "type": "object",
+  "required": ["schema_version", "id", "attempt_id", "attempt", "prompt_text", "text_clean", "audio_path", "render", "audio", "qc"],
+  "properties": {
+    "schema_version": { "const": "teto.render_attempt.v1" },
+    "id": { "type": "string", "pattern": "^teto_v4_[0-9]{8,}$" },
+    "attempt_id": { "type": "string", "pattern": "^teto_v4_[0-9]{8,}_a[0-9]{2,}$" },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "prompt_text": { "type": "string", "minLength": 1 },
+    "text_clean": { "type": "string", "minLength": 1 },
+    "audio_path": { "type": ["string", "null"] },
+    "render": {
+      "type": "object",
+      "required": ["engine", "profile", "reference_audio", "reference_text_version", "settings", "started_at", "ended_at", "elapsed_sec", "status"],
+      "properties": {
+        "engine": { "const": "fish_s2_pro" },
+        "profile": { "type": "string", "minLength": 1 },
+        "reference_audio": { "type": "string", "minLength": 1 },
+        "reference_text_version": { "type": "string", "minLength": 1 },
+        "settings": { "type": "object", "additionalProperties": true },
+        "started_at": { "type": "string" },
+        "ended_at": { "type": ["string", "null"] },
+        "elapsed_sec": { "type": ["number", "null"], "minimum": 0 },
+        "status": { "enum": ["success", "failed", "timeout", "cancelled"] },
+        "error": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "audio": {
+      "type": "object",
+      "required": ["duration_sec", "sample_rate", "channels", "generated_code_frames"],
+      "properties": {
+        "duration_sec": { "type": ["number", "null"], "minimum": 0 },
+        "sample_rate": { "type": ["integer", "null"], "minimum": 1 },
+        "channels": { "type": ["integer", "null"], "minimum": 1 },
+        "generated_code_frames": { "type": ["integer", "null"], "minimum": 0 },
+        "peak": { "type": ["number", "null"] },
+        "rms": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "qc": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["pending", "accepted", "rejected", "manual_review"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

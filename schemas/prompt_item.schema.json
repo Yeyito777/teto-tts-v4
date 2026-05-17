@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Yeyito777/teto-tts-v4/schemas/prompt_item.schema.json",
+  "title": "Teto v4 prompt item",
+  "type": "object",
+  "required": ["schema_version", "id", "source", "batch", "split", "language", "duration_target", "style", "content", "ai_generation", "status"],
+  "properties": {
+    "schema_version": { "const": "teto.prompt.v1" },
+    "id": { "type": "string", "pattern": "^teto_v4_[0-9]{8,}$" },
+    "source": { "enum": ["ai_generated", "manual", "template_generated"] },
+    "batch": { "type": "string", "minLength": 1 },
+    "split": { "enum": ["train", "val", "test"] },
+    "language": { "const": "en" },
+    "duration_target": {
+      "type": "object",
+      "required": ["bin", "target_sec_min", "target_sec_max", "target_words_min", "target_words_max"],
+      "properties": {
+        "bin": { "enum": ["2-4s", "4-8s", "8-15s", "15-30s", "30-60s", "edge_nonstandard"] },
+        "target_sec_min": { "type": "number", "minimum": 0 },
+        "target_sec_max": { "type": "number", "exclusiveMinimum": 0 },
+        "target_words_min": { "type": "integer", "minimum": 1 },
+        "target_words_max": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "style": {
+      "type": "object",
+      "required": ["prompt_prefix", "emphasis", "emotion", "intensity"],
+      "properties": {
+        "prompt_prefix": { "type": "string", "pattern": "^\\[emphasis\\] \\[.+\\]$" },
+        "emphasis": { "type": "boolean" },
+        "emotion": { "type": "string", "minLength": 1 },
+        "intensity": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "content": {
+      "type": "object",
+      "required": ["category", "text_clean", "prompt_text", "text_hash"],
+      "properties": {
+        "category": { "type": "string", "minLength": 1 },
+        "text_clean": { "type": "string", "minLength": 1 },
+        "prompt_text": { "type": "string", "minLength": 1 },
+        "text_hash": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "ai_generation": {
+      "type": "object",
+      "required": ["generator", "prompt_template", "seed", "created_at"],
+      "properties": {
+        "generator": { "type": "string", "minLength": 1 },
+        "prompt_template": { "type": "string", "minLength": 1 },
+        "seed": { "type": "integer" },
+        "created_at": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "status": { "enum": ["planned", "deduped", "queued", "rendered", "accepted", "rejected"] }
+  },
+  "additionalProperties": false
+}
